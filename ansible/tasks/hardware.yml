@@ -19,11 +19,17 @@
     name:
       - mesa
       - vulkan-intel
-      - lib32-mesa
-      - lib32-vulkan-intel
       - libinput
       - sof-firmware
     state: present
+
+- name: Install 32-bit graphics stack
+  ansible.builtin.package:
+    name:
+      - lib32-mesa
+      - lib32-vulkan-intel
+    state: present
+  when: graphics_32bit | bool
 
 
 # ---------------------------------------------------------------------------
@@ -262,6 +268,8 @@
     - bootloader == "grub"
     - grub_theme_enabled | bool
     - grub_theme_source_stat.stat.exists
+  notify:
+    - Regenerate GRUB configuration
 
 
 - name: Configure HyperFluent GRUB theme

@@ -37,6 +37,21 @@
     name: power-profiles-daemon.service
     enabled: true
     state: started
+  when: power_profiles_enabled | bool
+
+- name: Enable fwupd
+  ansible.builtin.systemd_service:
+    name: fwupd.service
+    enabled: true
+    state: started
+  when: fwupd_enabled | bool
+
+- name: Enable rtkit daemon
+  ansible.builtin.systemd_service:
+    name: rtkit-daemon.service
+    enabled: true
+    state: started
+  when: rtkit_enabled | bool
 
 
 # ---------------------------------------------------------------------------
@@ -69,6 +84,12 @@
     scope: global
     enabled: true
   when: pipewire_pulse | bool
+
+- name: Install 32-bit PipeWire support
+  ansible.builtin.package:
+    name: lib32-pipewire
+    state: present
+  when: pipewire_alsa_32bit | bool
 
 
 - name: Enable WirePlumber user service globally
@@ -318,11 +339,22 @@
 
 - name: Install Noctalia Greeter configuration
   ansible.builtin.copy:
-    src: "{{ playbook_dir }}/../display/noctalia-greeter/greeter.toml"
     dest: /var/lib/noctalia-greeter/greeter.toml
     owner: "{{ greeter_user }}"
     group: "{{ greeter_group }}"
     mode: "0644"
+    content: |
+      [session]
+      default = "Hyprland (uwsm-managed)"
+
+      [cursor]
+      theme = "{{ greeter_cursor_theme }}"
+      size = {{ greeter_cursor_size }}
+      path = "{{ greeter_cursor_path }}"
+
+      [keyboard]
+      layout = "{{ greeter_keyboard_layout }}"
+      numlock = true
   when: noctalia_greeter_enabled | bool
   notify:
     - Restart greetd
@@ -339,7 +371,7 @@
       vt = 1
 
       [default_session]
-      command = "env WLR_DIRECT_SCANOUT_DISABLED=1 {{ noctalia_greeter_command.stdout }}"
+      command = "env {% for env_var in greeter_environment | dict2items %}{{ env_var.key }}={{ env_var.value }} {% endfor %}{{ noctalia_greeter_command.stdout }}"
       user = "{{ greeter_user }}"
   when: noctalia_greeter_enabled | bool
   notify:
@@ -364,3 +396,26 @@
   ansible.builtin.package:
     name: kdeconnect
     state: present
+  when: kdeconnect_enabled | bool
+
+
+# ---------------------------------------------------------------------------
+# Steam
+# ---------------------------------------------------------------------------
+
+- name: Install Steam client
+  ansible.builtin.package:
+    name: steam
+    state: present
+  when: steam_enabled | bool
+
+
+# ---------------------------------------------------------------------------
+# Optional nwg-hello package (kept separate from active greeter)
+# ---------------------------------------------------------------------------
+
+- name: Install nwg-hello optionally
+  ansible.builtin.package:
+    name: nwg-hello
+    state: present
+  when: nwg_hello_enabled | bool

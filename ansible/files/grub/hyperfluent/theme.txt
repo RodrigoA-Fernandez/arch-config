@@ -1,0 +1,21 @@
+title-text: ""
+desktop-color: "#10131a"
+terminal-box: "0 0 0 0"
+terminal-font: "Unifont Regular 16"
+terminal-left: "6%"
+terminal-top: "72%"
+terminal-width: "88%"
+terminal-height: "24%"
+menu-color-normal: "#c8d1e8"
+menu-color-highlight: "#ffffff/#2f67ff"
+boot_menu {
+  left = 6%
+  top = 72%
+  width = 88%
+  height = 24%
+  item_font = "Unifont Regular 18"
+  item_height = 32
+  item_color = "#c8d1e8"
+  selected_item_color = "#ffffff"
+  selected_item_pixmap_style = "menuentry_select_*.png"
+}

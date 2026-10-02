@@ -26,6 +26,9 @@
     - name: Import virtualization configuration
       ansible.builtin.import_tasks: tasks/virtualization.yml
 
+    - name: Import optional AUR configuration
+      ansible.builtin.import_tasks: tasks/aur.yml
+
   handlers:
     - name: Restart keyd
       ansible.builtin.systemd_service:
