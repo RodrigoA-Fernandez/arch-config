@@ -106,6 +106,26 @@
 # Firewall
 # ---------------------------------------------------------------------------
 
+- name: Build effective firewall port lists
+  ansible.builtin.set_fact:
+    effective_firewall_tcp_ports: >-
+      {{
+        (
+          firewall_tcp_ports
+          + (steam_remote_play_tcp_ports if steam_remote_play_firewall_enabled | bool else [])
+          + (steam_dedicated_server_tcp_ports if steam_dedicated_server_firewall_enabled | bool else [])
+        ) | unique
+      }}
+    effective_firewall_udp_ports: >-
+      {{
+        (
+          firewall_udp_ports
+          + (steam_remote_play_udp_ports if steam_remote_play_firewall_enabled | bool else [])
+          + (steam_dedicated_server_udp_ports if steam_dedicated_server_firewall_enabled | bool else [])
+        ) | unique
+      }}
+  when: firewall_enabled | bool
+
 - name: Configure nftables
   ansible.builtin.copy:
     dest: /etc/nftables.conf
@@ -135,17 +155,17 @@
           # Avahi / mDNS
           udp dport 5353 accept
 
-          {% if firewall_tcp_ports | length > 0 %}
+          {% if effective_firewall_tcp_ports | length > 0 %}
           tcp dport {
-          {% for port in firewall_tcp_ports %}
+          {% for port in effective_firewall_tcp_ports %}
             {{ port }}{% if not loop.last %},{% endif %}
           {% endfor %}
           } accept
           {% endif %}
 
-          {% if firewall_udp_ports | length > 0 %}
+          {% if effective_firewall_udp_ports | length > 0 %}
           udp dport {
-          {% for port in firewall_udp_ports %}
+          {% for port in effective_firewall_udp_ports %}
             {{ port }}{% if not loop.last %},{% endif %}
           {% endfor %}
           } accept

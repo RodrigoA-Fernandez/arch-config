@@ -27,6 +27,14 @@
       - wireplumber
     state: present
 
+- name: Validate display manager selection
+  ansible.builtin.assert:
+    that:
+      - not (greetd_enabled | bool and noctalia_greeter_enabled | bool and sddm_enabled | bool)
+    fail_msg: >-
+      greetd+Noctalia y SDDM no deben habilitarse simultáneamente.
+      Desactiva sddm_enabled o desactiva noctalia_greeter_enabled.
+
 
 # ---------------------------------------------------------------------------
 # Power
@@ -52,6 +60,12 @@
     enabled: true
     state: started
   when: rtkit_enabled | bool
+
+- name: Install optional PulseAudio compatibility package
+  ansible.builtin.package:
+    name: pulseaudio
+    state: present
+  when: pulseaudio_compat_enabled | bool
 
 
 # ---------------------------------------------------------------------------
@@ -98,6 +112,43 @@
     scope: global
     enabled: true
   when: pipewire_wireplumber | bool
+
+
+# ---------------------------------------------------------------------------
+# DBus
+# ---------------------------------------------------------------------------
+
+- name: Gather service facts for DBus unit detection
+  ansible.builtin.service_facts:
+  when: dbus_enabled | bool
+
+- name: Select DBus unit
+  ansible.builtin.set_fact:
+    dbus_unit_name: >-
+      {{
+        'dbus-broker.service'
+        if 'dbus-broker.service' in (ansible_facts.services | default({}))
+        else 'dbus.service'
+      }}
+  when: dbus_enabled | bool
+
+- name: Validate DBus unit availability
+  ansible.builtin.assert:
+    that:
+      - "'dbus.service' in (ansible_facts.services | default({})) or 'dbus-broker.service' in (ansible_facts.services | default({}))"
+    fail_msg: >-
+      No se encontró dbus.service ni dbus-broker.service en el sistema.
+      Instala DBus o dbus-broker antes de continuar.
+  when: dbus_enabled | bool
+
+- name: Enable DBus service
+  ansible.builtin.systemd_service:
+    name: "{{ dbus_unit_name }}"
+    enabled: true
+    state: started
+  when:
+    - dbus_enabled | bool
+    - dbus_unit_name in (ansible_facts.services | default({}))
 
 
 # ---------------------------------------------------------------------------
@@ -273,6 +324,14 @@
     - hyprland_enabled | bool
     - uwsm_enabled | bool
 
+- name: Install optional Xorg compatibility packages
+  ansible.builtin.package:
+    name:
+      - xorg-server
+      - xorg-xwayland
+    state: present
+  when: xorg_compat_enabled | bool
+
 
 # ---------------------------------------------------------------------------
 # greetd / Noctalia Greeter
@@ -387,7 +446,24 @@
     - greetd_enabled | bool
     - noctalia_greeter_enabled | bool
 
-    #
+
+# ---------------------------------------------------------------------------
+# Optional SDDM
+# ---------------------------------------------------------------------------
+
+- name: Install SDDM optionally
+  ansible.builtin.package:
+    name: sddm
+    state: present
+  when: sddm_enabled | bool
+
+- name: Enable SDDM optionally
+  ansible.builtin.systemd_service:
+    name: sddm.service
+    enabled: true
+    state: started
+  when: sddm_enabled | bool
+
 # ---------------------------------------------------------------------------
 # KDE Connect
 # ---------------------------------------------------------------------------
@@ -419,3 +495,63 @@
     name: nwg-hello
     state: present
   when: nwg_hello_enabled | bool
+
+- name: Ensure nwg-hello configuration directories exist
+  ansible.builtin.file:
+    path: "{{ item.path }}"
+    state: directory
+    owner: root
+    group: root
+    mode: "{{ item.mode }}"
+  loop:
+    - path: /etc/nwg-hello
+      mode: "0755"
+    - path: /etc/nwg-hello/labwc
+      mode: "0755"
+  when: nwg_hello_enabled | bool
+
+- name: Install nwg-hello configuration files
+  ansible.builtin.copy:
+    src: "{{ item.src }}"
+    dest: "{{ item.dest }}"
+    owner: root
+    group: root
+    mode: "{{ item.mode }}"
+  loop:
+    - src: "{{ nwg_hello_repo_path }}/labwc/autostart"
+      dest: /etc/nwg-hello/labwc/autostart
+      mode: "0755"
+    - src: "{{ nwg_hello_repo_path }}/nwg-hello.json"
+      dest: /etc/nwg-hello/nwg-hello.json
+      mode: "0644"
+    - src: "{{ nwg_hello_repo_path }}/nwg-hello.css"
+      dest: /etc/nwg-hello/nwg-hello.css
+      mode: "0644"
+  when: nwg_hello_enabled | bool
+
+- name: Check nwg-hello wallpaper source
+  ansible.builtin.stat:
+    path: "{{ nwg_hello_wallpaper_source }}"
+  register: nwg_hello_wallpaper_stat
+  when: nwg_hello_enabled | bool
+
+- name: Validate nwg-hello wallpaper availability
+  ansible.builtin.assert:
+    that:
+      - (not (nwg_hello_wallpaper_required | bool)) or nwg_hello_wallpaper_stat.stat.exists
+    fail_msg: >-
+      nwg_hello_enabled=true requiere un wallpaper válido.
+      Define nwg_hello_wallpaper_source con una ruta existente
+      o desactiva nwg_hello_wallpaper_required.
+  when: nwg_hello_enabled | bool
+
+- name: Install nwg-hello wallpaper
+  ansible.builtin.copy:
+    src: "{{ nwg_hello_wallpaper_source }}"
+    dest: "{{ nwg_hello_wallpaper_target }}"
+    owner: root
+    group: root
+    mode: "0644"
+  when:
+    - nwg_hello_enabled | bool
+    - nwg_hello_wallpaper_stat.stat.exists

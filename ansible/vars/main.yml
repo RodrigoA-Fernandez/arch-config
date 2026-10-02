@@ -29,7 +29,12 @@ user_groups:
   - openrazer
   - scanner
   - lp
+
+libvirt_group_candidates:
   - libvirt
+  - libvirtd
+
+extra_user_groups:
   - kvm
 
 
@@ -54,6 +59,21 @@ firewall_udp_ports:
   - 1701
   - 1716
   - 53317
+
+steam_remote_play_firewall_enabled: false
+steam_remote_play_tcp_ports:
+  - 27036
+  - 27037
+steam_remote_play_udp_ports:
+  - 27031
+  - 27036
+
+steam_dedicated_server_firewall_enabled: false
+steam_dedicated_server_tcp_ports:
+  - 27015
+  - 27030
+steam_dedicated_server_udp_ports:
+  - 27015
 
 
 # ---------------------------------------------------------------------------
@@ -136,6 +156,7 @@ uwsm_enabled: true
 
 xdg_portal_enabled: true
 xdg_portal_hyprland: true
+xorg_compat_enabled: false
 
 
 # ---------------------------------------------------------------------------
@@ -144,6 +165,7 @@ xdg_portal_hyprland: true
 
 greetd_enabled: true
 noctalia_greeter_enabled: true
+sddm_enabled: false
 
 greeter_user: greeter
 greeter_group: greeter
@@ -172,13 +194,20 @@ pipewire_alsa_32bit: true
 pipewire_pulse: true
 pipewire_jack: true
 pipewire_wireplumber: true
+pulseaudio_compat_enabled: false
 
 fwupd_enabled: true
 power_profiles_enabled: true
 kdeconnect_enabled: true
+dbus_enabled: true
 
 steam_enabled: true
 nwg_hello_enabled: false
+nwg_hello_repo_path: "{{ playbook_dir }}/../display/nwg-hello"
+nwg_hello_wallpaper_source: "{{ nwg_hello_repo_path }}/wallpaper.jpg"
+nwg_hello_wallpaper_target: /etc/nwg-hello/wallpaper.jpg
+nwg_hello_wallpaper_required: true
+nix_compat_enabled: false
 
 official_packages:
   - neovim
@@ -190,7 +219,6 @@ official_packages:
   - wine
   - alacritty
   - alsa-utils
-  - pulseaudio
   - direnv
   - pavucontrol
   - wireshark-qt
@@ -206,10 +234,18 @@ official_packages:
 
 aur_install_enabled: false
 aur_helper: yay
-aur_packages:
+aur_required_packages:
+  - noctalia-greeter
+
+aur_optional_packages:
   - open-scq30
   - polychromatic
-  - noctalia-greeter
+
+sddm_aur_packages:
+  - sddm-astronaut
+  - catppuccin-sddm
+
+nix_compat_aur_packages:
   - nix-direnv
 
 
@@ -229,4 +265,4 @@ libvirt_enabled: true
 podman_enabled: true
 podman_docker_compat: true
 distrobox_alias_enabled: true
-distrobox_alias: 'alias distrobox="XDG_DATA_DIRS=${GSETTINGS_SCHEMAS_PATH:-$XDG_DATA_DIRS} distrobox"'
+distrobox_alias: 'alias distrobox="XDG_DATA_DIRS=${GSETTINGS_SCHEMAS_PATH:+$GSETTINGS_SCHEMAS_PATH:}$XDG_DATA_DIRS distrobox_DIRS=${GSETTINGS_SCHEMAS_PATH:+$GSETTINGS_SCHEMAS_PATH:}$XDG_DATA_DIRS distrobox"'

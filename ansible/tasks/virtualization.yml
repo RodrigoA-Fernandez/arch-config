@@ -49,15 +49,35 @@
 # User groups
 # ---------------------------------------------------------------------------
 
+- name: Detect libvirt-compatible group names
+  ansible.builtin.command:
+    cmd: "getent group {{ item }}"
+  loop: "{{ libvirt_group_candidates }}"
+  register: libvirt_group_detect
+  changed_when: false
+  failed_when: false
+
+- name: Select libvirt group name
+  ansible.builtin.set_fact:
+    libvirt_group_name: >-
+      {{
+        (libvirt_group_detect.results | selectattr('rc', 'eq', 0) | map(attribute='item') | list | first)
+        | default(libvirt_group_candidates[0])
+      }}
+
+- name: Build effective user groups
+  ansible.builtin.set_fact:
+    effective_user_groups: "{{ (user_groups + extra_user_groups + [libvirt_group_name]) | unique }}"
+
 - name: Ensure configured user groups exist
   ansible.builtin.group:
     name: "{{ item }}"
     state: present
-  loop: "{{ user_groups }}"
+  loop: "{{ effective_user_groups }}"
 
 
 - name: Add user to configured groups
   ansible.builtin.user:
     name: "{{ username }}"
-    groups: "{{ user_groups }}"
+    groups: "{{ effective_user_groups }}"
     append: true

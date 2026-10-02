@@ -54,11 +54,12 @@
     regexp: '^#?\s*{{ locale | regex_escape }}\s+UTF-8$'
     line: '{{ locale }} UTF-8'
     state: present
+  register: locale_gen_locale
 
 - name: Generate locales
   ansible.builtin.command:
     cmd: locale-gen
-  changed_when: false
+  when: locale_gen_locale.changed
 
 - name: Configure locale
   ansible.builtin.copy:
