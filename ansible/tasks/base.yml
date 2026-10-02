@@ -88,6 +88,10 @@
     cmd: timedatectl set-timezone "{{ timezone }}"
   changed_when: false
 
+- name: Configure hostname
+  ansible.builtin.hostname:
+    name: "{{ hostname }}"
+
 
 # ---------------------------------------------------------------------------
 # Console
@@ -124,6 +128,32 @@
     mode: "0440"
     content: |
       %wheel ALL=(ALL:ALL) ALL
+
+
+# ---------------------------------------------------------------------------
+# User packages
+# ---------------------------------------------------------------------------
+
+- name: Install official user packages
+  ansible.builtin.package:
+    name: "{{ official_packages }}"
+    state: present
+
+
+# ---------------------------------------------------------------------------
+# Shell integration
+# ---------------------------------------------------------------------------
+
+- name: Configure Distrobox alias for Zsh user
+  ansible.builtin.lineinfile:
+    path: "/home/{{ username }}/.zshrc"
+    line: "{{ distrobox_alias }}"
+    regexp: '^alias distrobox='
+    create: true
+    owner: "{{ username }}"
+    group: "{{ username }}"
+    mode: "0644"
+  when: distrobox_alias_enabled | bool
 
 
 # ---------------------------------------------------------------------------

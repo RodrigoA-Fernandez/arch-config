@@ -1,0 +1,49 @@
+---
+# ---------------------------------------------------------------------------
+# Optional AUR handling
+# ---------------------------------------------------------------------------
+
+- name: Check AUR helper
+  ansible.builtin.command:
+    cmd: "command -v {{ aur_helper }}"
+  register: aur_helper_check
+  changed_when: false
+  failed_when: false
+  become: false
+  when:
+    - aur_install_enabled | bool
+    - aur_packages | length > 0
+
+- name: Ensure AUR helper exists when AUR install is enabled
+  ansible.builtin.assert:
+    that:
+      - aur_helper_check.rc == 0
+    fail_msg: >-
+      aur_install_enabled=true pero {{ aur_helper }} no está instalado.
+      Instálalo manualmente como {{ username }} y vuelve a ejecutar el playbook.
+  when:
+    - aur_install_enabled | bool
+    - aur_packages | length > 0
+
+- name: Install configured AUR packages as user
+  ansible.builtin.command:
+    cmd: "{{ aur_helper }} -S --needed --noconfirm {{ aur_packages | join(' ') }}"
+  become: true
+  become_user: "{{ username }}"
+  register: aur_install_result
+  changed_when: >-
+    'there is nothing to do' not in
+    ((aur_install_result.stdout | default('')) + (aur_install_result.stderr | default('')))
+  when:
+    - aur_install_enabled | bool
+    - aur_packages | length > 0
+
+- name: Inform pending AUR packages when auto-install is disabled
+  ansible.builtin.debug:
+    msg:
+      - "AUR packages pendientes (instalación automática desactivada):"
+      - "{{ aur_packages }}"
+      - "Para automatizar, activa aur_install_enabled=true y configura aur_helper."
+  when:
+    - not (aur_install_enabled | bool)
+    - aur_packages | length > 0

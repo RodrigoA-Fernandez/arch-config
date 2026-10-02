@@ -10,7 +10,6 @@
       - network-manager-applet
       - avahi
       - nss-mdns
-      - openssh
       - nftables
     state: present
 
@@ -31,12 +30,25 @@
 # SSH
 # ---------------------------------------------------------------------------
 
+- name: Install OpenSSH package
+  ansible.builtin.package:
+    name: openssh
+    state: present
+  when: ssh_enabled | bool
+
 - name: Enable SSH
   ansible.builtin.systemd_service:
     name: sshd.service
     enabled: true
     state: started
   when: ssh_enabled | bool
+
+- name: Disable SSH by default
+  ansible.builtin.systemd_service:
+    name: sshd.service
+    enabled: false
+    state: stopped
+  when: not (ssh_enabled | bool)
 
 
 # ---------------------------------------------------------------------------
