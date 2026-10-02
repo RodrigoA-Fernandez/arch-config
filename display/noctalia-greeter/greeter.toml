@@ -1,0 +1,14 @@
+# Noctalia Greeter
+# Administrator-managed declarative configuration.
+
+[session]
+default = "Hyprland (uwsm-managed)"
+
+[cursor]
+theme = "Bibata-Modern-Ice"
+size = 24
+path = "/usr/share/icons"
+
+[keyboard]
+layout = "es"
+numlock = true

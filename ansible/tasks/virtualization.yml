@@ -1,0 +1,63 @@
+---
+# ---------------------------------------------------------------------------
+# Libvirt / QEMU
+# ---------------------------------------------------------------------------
+
+- name: Install virtualization packages
+  ansible.builtin.package:
+    name:
+      - qemu-desktop
+      - libvirt
+      - virt-manager
+      - virt-install
+      - dnsmasq
+      - edk2-ovmf
+      - swtpm
+    state: present
+  when: libvirt_enabled | bool
+
+
+- name: Enable libvirt
+  ansible.builtin.systemd_service:
+    name: libvirtd.service
+    enabled: true
+    state: started
+  when: libvirt_enabled | bool
+
+
+# ---------------------------------------------------------------------------
+# Podman
+# ---------------------------------------------------------------------------
+
+- name: Install Podman
+  ansible.builtin.package:
+    name: podman
+    state: present
+  when: podman_enabled | bool
+
+
+- name: Install Docker compatibility for Podman
+  ansible.builtin.package:
+    name: podman-docker
+    state: present
+  when:
+    - podman_enabled | bool
+    - podman_docker_compat | bool
+
+
+# ---------------------------------------------------------------------------
+# User groups
+# ---------------------------------------------------------------------------
+
+- name: Ensure configured user groups exist
+  ansible.builtin.group:
+    name: "{{ item }}"
+    state: present
+  loop: "{{ user_groups }}"
+
+
+- name: Add user to configured groups
+  ansible.builtin.user:
+    name: "{{ username }}"
+    groups: "{{ user_groups }}"
+    append: true

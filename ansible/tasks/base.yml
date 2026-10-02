@@ -1,0 +1,156 @@
+---
+# ---------------------------------------------------------------------------
+# Multilib
+# ---------------------------------------------------------------------------
+
+- name: Enable multilib repository
+  ansible.builtin.lineinfile:
+    path: /etc/pacman.conf
+    regexp: '^#\[multilib\]$'
+    line: '[multilib]'
+    state: present
+  when: multilib_enabled | bool
+
+- name: Enable multilib mirrorlist
+  ansible.builtin.lineinfile:
+    path: /etc/pacman.conf
+    regexp: '^#Include = /etc/pacman.d/mirrorlist$'
+    line: 'Include = /etc/pacman.d/mirrorlist'
+    insertafter: '^\[multilib\]$'
+    state: present
+  when: multilib_enabled | bool
+
+
+# ---------------------------------------------------------------------------
+# Base packages
+# ---------------------------------------------------------------------------
+
+- name: Install base packages
+  ansible.builtin.package:
+    name:
+      - base-devel
+      - git
+      - sudo
+      - zsh
+      - rsync
+      - unzip
+      - unrar
+      - curl
+      - wget
+      - man-db
+      - man-pages
+      - bash-completion
+      - linux-firmware
+    state: present
+
+
+# ---------------------------------------------------------------------------
+# Locale
+# ---------------------------------------------------------------------------
+
+- name: Enable Spanish UTF-8 locale
+  ansible.builtin.lineinfile:
+    path: /etc/locale.gen
+    regexp: '^#?\s*{{ locale | regex_escape }}\s+UTF-8$'
+    line: '{{ locale }} UTF-8'
+    state: present
+
+- name: Generate locales
+  ansible.builtin.command:
+    cmd: locale-gen
+  changed_when: false
+
+- name: Configure locale
+  ansible.builtin.copy:
+    dest: /etc/locale.conf
+    owner: root
+    group: root
+    mode: "0644"
+    content: |
+      LANG={{ locale }}
+      LC_ADDRESS={{ locale }}
+      LC_IDENTIFICATION={{ locale }}
+      LC_MEASUREMENT={{ locale }}
+      LC_MONETARY={{ locale }}
+      LC_NAME={{ locale }}
+      LC_NUMERIC={{ locale }}
+      LC_PAPER={{ locale }}
+      LC_TELEPHONE={{ locale }}
+      LC_TIME={{ locale }}
+
+
+# ---------------------------------------------------------------------------
+# Timezone
+# ---------------------------------------------------------------------------
+
+- name: Configure timezone
+  ansible.builtin.command:
+    cmd: timedatectl set-timezone "{{ timezone }}"
+  changed_when: false
+
+
+# ---------------------------------------------------------------------------
+# Console
+# ---------------------------------------------------------------------------
+
+- name: Configure console keymap
+  ansible.builtin.copy:
+    dest: /etc/vconsole.conf
+    owner: root
+    group: root
+    mode: "0644"
+    content: |
+      KEYMAP={{ console_keymap }}
+
+
+# ---------------------------------------------------------------------------
+# User
+# ---------------------------------------------------------------------------
+
+- name: Ensure user exists
+  ansible.builtin.user:
+    name: "{{ username }}"
+    shell: "{{ user_shell }}"
+    create_home: true
+    groups:
+      - wheel
+    append: true
+
+- name: Configure sudo for wheel
+  ansible.builtin.copy:
+    dest: /etc/sudoers.d/10-wheel
+    owner: root
+    group: root
+    mode: "0440"
+    content: |
+      %wheel ALL=(ALL:ALL) ALL
+
+
+# ---------------------------------------------------------------------------
+# Fonts / graphics support
+# ---------------------------------------------------------------------------
+
+- name: Install desktop base packages
+  ansible.builtin.package:
+    name:
+      - ttf-jetbrains-mono-nerd
+      - bibata-cursor-theme
+      - adwaita-icon-theme
+      - gdk-pixbuf2
+      - librsvg
+    state: present
+
+
+# ---------------------------------------------------------------------------
+# Global environment
+# ---------------------------------------------------------------------------
+
+- name: Configure graphics environment
+  ansible.builtin.copy:
+    dest: /etc/environment.d/90-graphics.conf
+    owner: root
+    group: root
+    mode: "0644"
+    content: |
+      __GL_GSYNC_ALLOWED=0
+      __GL_VRR_ALLOWED=0

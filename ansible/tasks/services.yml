@@ -1,0 +1,366 @@
+---
+# ---------------------------------------------------------------------------
+# System packages
+# ---------------------------------------------------------------------------
+
+- name: Install service packages
+  ansible.builtin.package:
+    name:
+      - fwupd
+      - power-profiles-daemon
+      - cups
+      - cups-filters
+      - cups-browsed
+      - brlaser
+      - dbus
+      - flatpak
+      - gvfs
+      - gvfs-mtp
+      - udisks2
+      - upower
+      - gnome-keyring
+      - rtkit
+      - pipewire
+      - pipewire-alsa
+      - pipewire-pulse
+      - pipewire-jack
+      - wireplumber
+    state: present
+
+
+# ---------------------------------------------------------------------------
+# Power
+# ---------------------------------------------------------------------------
+
+- name: Enable power-profiles-daemon
+  ansible.builtin.systemd_service:
+    name: power-profiles-daemon.service
+    enabled: true
+    state: started
+
+
+# ---------------------------------------------------------------------------
+# Printing
+# ---------------------------------------------------------------------------
+
+- name: Enable CUPS
+  ansible.builtin.systemd_service:
+    name: cups.service
+    enabled: true
+    state: started
+  when: printing_enabled | bool
+
+
+# ---------------------------------------------------------------------------
+# PipeWire user services
+# ---------------------------------------------------------------------------
+
+- name: Enable PipeWire user service globally
+  ansible.builtin.systemd_service:
+    name: pipewire.service
+    scope: global
+    enabled: true
+  when: pipewire_alsa | bool or pipewire_pulse | bool or pipewire_jack | bool
+
+
+- name: Enable PipeWire Pulse user service globally
+  ansible.builtin.systemd_service:
+    name: pipewire-pulse.service
+    scope: global
+    enabled: true
+  when: pipewire_pulse | bool
+
+
+- name: Enable WirePlumber user service globally
+  ansible.builtin.systemd_service:
+    name: wireplumber.service
+    scope: global
+    enabled: true
+  when: pipewire_wireplumber | bool
+
+
+# ---------------------------------------------------------------------------
+# OpenRazer user service
+# ---------------------------------------------------------------------------
+
+- name: Enable OpenRazer user service globally
+  ansible.builtin.systemd_service:
+    name: openrazer-daemon.service
+    scope: global
+    enabled: true
+  when: openrazer_enabled | bool
+
+
+# ---------------------------------------------------------------------------
+# Keyd
+# ---------------------------------------------------------------------------
+
+- name: Install keyd
+  ansible.builtin.package:
+    name: keyd
+    state: present
+
+
+- name: Configure keyd
+  ansible.builtin.copy:
+    dest: /etc/keyd/default.conf
+    owner: root
+    group: root
+    mode: "0644"
+    content: |
+      [ids]
+      *
+
+      [main]
+      capslock = esc
+      esc = capslock
+  notify:
+    - Restart keyd
+
+
+- name: Enable keyd
+  ansible.builtin.systemd_service:
+    name: keyd.service
+    enabled: true
+    state: started
+
+
+# ---------------------------------------------------------------------------
+# udev hwdb
+# ---------------------------------------------------------------------------
+
+- name: Configure Ideapad extra buttons
+  ansible.builtin.copy:
+    dest: /etc/udev/hwdb.d/90-ideapad-extra-buttons.hwdb
+    owner: root
+    group: root
+    mode: "0644"
+    content: |
+      evdev:name:Ideapad extra buttons:*
+        KEYBOARD_KEY_08=f20
+        KEYBOARD_KEY_101=f21
+        KEYBOARD_KEY_12d=f22
+
+- name: Update udev hardware database
+  ansible.builtin.command:
+    cmd: systemd-hwdb update
+  changed_when: false
+
+- name: Reload udev devices
+  ansible.builtin.command:
+    cmd: udevadm trigger
+  changed_when: false
+
+
+# ---------------------------------------------------------------------------
+# systemd rfkill
+# ---------------------------------------------------------------------------
+
+- name: Enable systemd-rfkill socket
+  ansible.builtin.systemd_service:
+    name: systemd-rfkill.socket
+    enabled: true
+    state: started
+
+
+# ---------------------------------------------------------------------------
+# Syncthing
+# ---------------------------------------------------------------------------
+
+- name: Create Syncthing data directory
+  ansible.builtin.file:
+    path: "{{ syncthing_data_dir }}"
+    state: directory
+    owner: "{{ syncthing_user }}"
+    group: "{{ syncthing_user }}"
+    mode: "0755"
+
+
+- name: Create Syncthing configuration directory
+  ansible.builtin.file:
+    path: "{{ syncthing_config_dir }}"
+    state: directory
+    owner: "{{ syncthing_user }}"
+    group: "{{ syncthing_user }}"
+    mode: "0700"
+
+
+- name: Enable Syncthing system service
+  ansible.builtin.systemd_service:
+    name: "syncthing@{{ syncthing_user }}.service"
+    enabled: true
+    state: started
+
+
+# ---------------------------------------------------------------------------
+# XDG portals
+# ---------------------------------------------------------------------------
+
+- name: Install XDG portal packages
+  ansible.builtin.package:
+    name:
+      - xdg-desktop-portal
+      - xdg-desktop-portal-hyprland
+    state: present
+  when:
+    - xdg_portal_enabled | bool
+    - xdg_portal_hyprland | bool
+
+
+- name: Configure XDG portal backend
+  ansible.builtin.file:
+    path: /etc/xdg/xdg-desktop-portal
+    state: directory
+    owner: root
+    group: root
+    mode: "0755"
+  when:
+    - xdg_portal_enabled | bool
+    - xdg_portal_hyprland | bool
+
+
+- name: Prefer Hyprland portal backend
+  ansible.builtin.copy:
+    dest: /etc/xdg/xdg-desktop-portal/portals.conf
+    owner: root
+    group: root
+    mode: "0644"
+    content: |
+      [preferred]
+      default=hyprland
+  when:
+    - xdg_portal_enabled | bool
+    - xdg_portal_hyprland | bool
+
+
+# ---------------------------------------------------------------------------
+# Hyprland / UWSM
+# ---------------------------------------------------------------------------
+
+- name: Install Hyprland
+  ansible.builtin.package:
+    name: hyprland
+    state: present
+  when: hyprland_enabled | bool
+
+
+- name: Install UWSM
+  ansible.builtin.package:
+    name: uwsm
+    state: present
+  when:
+    - hyprland_enabled | bool
+    - uwsm_enabled | bool
+
+
+# ---------------------------------------------------------------------------
+# greetd / Noctalia Greeter
+# ---------------------------------------------------------------------------
+
+- name: Install greetd
+  ansible.builtin.package:
+    name: greetd
+    state: present
+  when: greetd_enabled | bool
+
+
+- name: Ensure greeter group exists
+  ansible.builtin.group:
+    name: "{{ greeter_group }}"
+    system: true
+    state: present
+  when: greetd_enabled | bool
+
+
+- name: Ensure greeter user exists
+  ansible.builtin.user:
+    name: "{{ greeter_user }}"
+    group: "{{ greeter_group }}"
+    groups:
+      - video
+      - render
+      - input
+    system: true
+    create_home: false
+    shell: /usr/bin/nologin
+  when: greetd_enabled | bool
+
+
+- name: Check Noctalia Greeter session wrapper
+  ansible.builtin.command:
+    cmd: command -v noctalia-greeter-session
+  register: noctalia_greeter_command
+  changed_when: false
+  failed_when: false
+  when: noctalia_greeter_enabled | bool
+
+
+- name: Verify Noctalia Greeter is installed
+  ansible.builtin.assert:
+    that:
+      - noctalia_greeter_command.rc == 0
+    fail_msg: >-
+      noctalia-greeter-session no está instalado.
+      Instala Noctalia Greeter mediante tu gestor de paquetes/AUR antes
+      de ejecutar esta configuración.
+  when: noctalia_greeter_enabled | bool
+
+
+- name: Create Noctalia Greeter state directory
+  ansible.builtin.file:
+    path: /var/lib/noctalia-greeter
+    state: directory
+    owner: "{{ greeter_user }}"
+    group: "{{ greeter_group }}"
+    mode: "0750"
+  when: noctalia_greeter_enabled | bool
+
+
+- name: Install Noctalia Greeter configuration
+  ansible.builtin.copy:
+    src: "{{ playbook_dir }}/../display/noctalia-greeter/greeter.toml"
+    dest: /var/lib/noctalia-greeter/greeter.toml
+    owner: "{{ greeter_user }}"
+    group: "{{ greeter_group }}"
+    mode: "0644"
+  when: noctalia_greeter_enabled | bool
+  notify:
+    - Restart greetd
+
+
+- name: Configure greetd
+  ansible.builtin.copy:
+    dest: /etc/greetd/config.toml
+    owner: root
+    group: root
+    mode: "0644"
+    content: |
+      [terminal]
+      vt = 1
+
+      [default_session]
+      command = "env WLR_DIRECT_SCANOUT_DISABLED=1 {{ noctalia_greeter_command.stdout }}"
+      user = "{{ greeter_user }}"
+  when: noctalia_greeter_enabled | bool
+  notify:
+    - Restart greetd
+
+
+- name: Enable greetd
+  ansible.builtin.systemd_service:
+    name: greetd.service
+    enabled: true
+    state: started
+  when:
+    - greetd_enabled | bool
+    - noctalia_greeter_enabled | bool
+
+    #
+# ---------------------------------------------------------------------------
+# KDE Connect
+# ---------------------------------------------------------------------------
+
+- name: Install KDE Connect
+  ansible.builtin.package:
+    name: kdeconnect
+    state: present

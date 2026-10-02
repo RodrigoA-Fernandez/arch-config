@@ -1,0 +1,327 @@
+---
+# ---------------------------------------------------------------------------
+# CPU / firmware
+# ---------------------------------------------------------------------------
+
+- name: Install Intel microcode
+  ansible.builtin.package:
+    name: intel-ucode
+    state: present
+  when: intel_microcode_enabled | bool
+
+
+# ---------------------------------------------------------------------------
+# Graphics
+# ---------------------------------------------------------------------------
+
+- name: Install graphics stack
+  ansible.builtin.package:
+    name:
+      - mesa
+      - vulkan-intel
+      - lib32-mesa
+      - lib32-vulkan-intel
+      - libinput
+      - sof-firmware
+    state: present
+
+
+# ---------------------------------------------------------------------------
+# OpenRazer
+# ---------------------------------------------------------------------------
+
+- name: Install OpenRazer
+  ansible.builtin.package:
+    name:
+      - openrazer-daemon
+      - openrazer-driver-dkms
+      - python-openrazer
+    state: present
+  when: openrazer_enabled | bool
+
+
+# ---------------------------------------------------------------------------
+# Steam device rules
+# ---------------------------------------------------------------------------
+
+- name: Install Steam device rules
+  ansible.builtin.package:
+    name: steam-devices
+    state: present
+  when: steam_devices_enabled | bool
+
+
+# ---------------------------------------------------------------------------
+# Detect NVIDIA
+# ---------------------------------------------------------------------------
+
+- name: Detect NVIDIA GPU
+  ansible.builtin.shell:
+    cmd: "lspci -nn | grep -Ei 'VGA|3D|Display' | grep -i nvidia"
+  register: nvidia_gpu
+  failed_when: false
+  changed_when: false
+
+
+# ---------------------------------------------------------------------------
+# NVIDIA
+# ---------------------------------------------------------------------------
+
+- name: Install NVIDIA driver
+  ansible.builtin.package:
+    name:
+      - "{{ nvidia_driver_package }}"
+      - nvidia-utils
+      - lib32-nvidia-utils
+    state: present
+  when:
+    - nvidia_enabled | bool
+    - nvidia_gpu.rc == 0
+
+
+- name: Configure NVIDIA DRM modules
+  ansible.builtin.copy:
+    dest: /etc/modprobe.d/nvidia.conf
+    owner: root
+    group: root
+    mode: "0644"
+    content: |
+      options nvidia_drm modeset={{ 1 if nvidia_modesetting else 0 }}
+      options nvidia_drm fbdev={{ 1 if nvidia_fbdev else 0 }}
+  when:
+    - nvidia_enabled | bool
+    - nvidia_gpu.rc == 0
+  notify:
+    - Rebuild initramfs
+
+
+- name: Enable NVIDIA suspend service
+  ansible.builtin.systemd_service:
+    name: nvidia-suspend.service
+    enabled: true
+  when:
+    - nvidia_enabled | bool
+    - nvidia_power_management | bool
+    - nvidia_gpu.rc == 0
+
+
+- name: Enable NVIDIA resume service
+  ansible.builtin.systemd_service:
+    name: nvidia-resume.service
+    enabled: true
+  when:
+    - nvidia_enabled | bool
+    - nvidia_power_management | bool
+    - nvidia_gpu.rc == 0
+
+
+- name: Enable NVIDIA hibernate service
+  ansible.builtin.systemd_service:
+    name: nvidia-hibernate.service
+    enabled: true
+  when:
+    - nvidia_enabled | bool
+    - nvidia_power_management | bool
+    - nvidia_gpu.rc == 0
+
+
+# ---------------------------------------------------------------------------
+# Initramfs modules
+# ---------------------------------------------------------------------------
+
+- name: Configure initramfs modules
+  ansible.builtin.lineinfile:
+    path: /etc/mkinitcpio.conf
+    regexp: '^MODULES='
+    line: 'MODULES=({{ initrd_kernel_modules | join(" ") }})'
+  notify:
+    - Rebuild initramfs
+
+
+# ---------------------------------------------------------------------------
+# Runtime kernel modules
+# ---------------------------------------------------------------------------
+
+- name: Configure runtime kernel modules
+  ansible.builtin.copy:
+    dest: /etc/modules-load.d/arch-config.conf
+    owner: root
+    group: root
+    mode: "0644"
+    content: |
+      {% for module in kernel_modules %}
+      {{ module }}
+      {% endfor %}
+
+
+# ---------------------------------------------------------------------------
+# GRUB kernel parameters
+# ---------------------------------------------------------------------------
+
+- name: Configure GRUB kernel parameters
+  ansible.builtin.lineinfile:
+    path: /etc/default/grub
+    regexp: '^GRUB_CMDLINE_LINUX_DEFAULT='
+    line: >-
+      GRUB_CMDLINE_LINUX_DEFAULT="{{ kernel_parameters | join(' ') }}{% if nvidia_enabled and nvidia_gpu.rc == 0 and nvidia_modesetting %} nvidia-drm.modeset=1{% endif %}{% if nvidia_enabled and nvidia_gpu.rc == 0 and nvidia_fbdev %} nvidia-drm.fbdev=1{% endif %}"
+  notify:
+    - Regenerate GRUB configuration
+
+
+# ---------------------------------------------------------------------------
+# GRUB
+# ---------------------------------------------------------------------------
+
+- name: Install GRUB packages
+  ansible.builtin.package:
+    name:
+      - grub
+      - efibootmgr
+    state: present
+  when: bootloader == "grub"
+
+
+- name: Install os-prober
+  ansible.builtin.package:
+    name:
+      - os-prober
+      - ntfs-3g
+    state: present
+  when:
+    - bootloader == "grub"
+    - grub_os_prober | bool
+
+
+- name: Enable GRUB os-prober
+  ansible.builtin.lineinfile:
+    path: /etc/default/grub
+    regexp: '^GRUB_DISABLE_OS_PROBER='
+    line: 'GRUB_DISABLE_OS_PROBER=false'
+    state: present
+  when:
+    - bootloader == "grub"
+    - grub_os_prober | bool
+  notify:
+    - Regenerate GRUB configuration
+
+
+- name: Check EFI firmware
+  ansible.builtin.stat:
+    path: /sys/firmware/efi
+  register: efi_firmware
+
+
+- name: Verify EFI boot
+  ansible.builtin.assert:
+    that:
+      - efi_firmware.stat.exists
+    fail_msg: >-
+      grub_efi=true pero el sistema no se ha arrancado en modo UEFI.
+  when:
+    - bootloader == "grub"
+    - grub_efi | bool
+
+
+- name: Install GRUB to EFI system partition
+  ansible.builtin.command:
+    cmd: >
+      grub-install
+      --target=x86_64-efi
+      --efi-directory=/boot
+      --bootloader-id=GRUB
+      --recheck
+  args:
+    creates: /boot/EFI/GRUB/grubx64.efi
+  when:
+    - bootloader == "grub"
+    - grub_efi | bool
+    - efi_firmware.stat.exists
+
+
+# ---------------------------------------------------------------------------
+# HyperFluent GRUB theme
+# ---------------------------------------------------------------------------
+
+- name: Check for local HyperFluent theme
+  ansible.builtin.stat:
+    path: "{{ grub_theme_source }}"
+  register: grub_theme_source_stat
+  when:
+    - bootloader == "grub"
+    - grub_theme_enabled | bool
+
+
+- name: Install local HyperFluent theme
+  ansible.builtin.copy:
+    src: "{{ grub_theme_source }}/"
+    dest: "{{ grub_theme_destination }}/"
+    owner: root
+    group: root
+    mode: "0644"
+  when:
+    - bootloader == "grub"
+    - grub_theme_enabled | bool
+    - grub_theme_source_stat.stat.exists
+
+
+- name: Configure HyperFluent GRUB theme
+  ansible.builtin.lineinfile:
+    path: /etc/default/grub
+    regexp: '^GRUB_THEME='
+    line: 'GRUB_THEME="{{ grub_theme_destination }}/theme.txt"'
+    state: present
+  when:
+    - bootloader == "grub"
+    - grub_theme_enabled | bool
+    - grub_theme_source_stat.stat.exists
+  notify:
+    - Regenerate GRUB configuration
+
+
+- name: Configure GRUB graphical terminal
+  ansible.builtin.lineinfile:
+    path: /etc/default/grub
+    regexp: '^#?GRUB_TERMINAL_OUTPUT='
+    line: 'GRUB_TERMINAL_OUTPUT="gfxterm"'
+    state: present
+  when:
+    - bootloader == "grub"
+    - grub_theme_enabled | bool
+    - grub_theme_source_stat.stat.exists
+  notify:
+    - Regenerate GRUB configuration
+
+
+# ---------------------------------------------------------------------------
+# Plymouth
+# ---------------------------------------------------------------------------
+
+- name: Install Plymouth
+  ansible.builtin.package:
+    name: plymouth
+    state: present
+  when: plymouth_enabled | bool
+
+
+- name: Configure Plymouth hook
+  ansible.builtin.replace:
+    path: /etc/mkinitcpio.conf
+    regexp: '^(HOOKS=\([^)]*\budev\b)(?![^)]*\bplymouth\b)([^)]*\))$'
+    replace: '\1 plymouth\2'
+  when: plymouth_enabled | bool
+  notify:
+    - Rebuild initramfs
+
+
+- name: Configure Plymouth theme
+  ansible.builtin.copy:
+    dest: /etc/plymouth/plymouthd.conf
+    owner: root
+    group: root
+    mode: "0644"
+    content: |
+      [Daemon]
+      Theme={{ plymouth_theme }}
+  when: plymouth_enabled | bool
+  notify:
+    - Rebuild initramfs

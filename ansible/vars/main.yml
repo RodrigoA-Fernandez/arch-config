@@ -1,0 +1,192 @@
+---
+# ---------------------------------------------------------------------------
+# System
+# ---------------------------------------------------------------------------
+
+hostname: roderico
+timezone: Europe/Madrid
+
+locale: es_ES.UTF-8
+console_keymap: es
+
+multilib_enabled: true
+
+
+# ---------------------------------------------------------------------------
+# User
+# ---------------------------------------------------------------------------
+
+username: rodrigo
+user_shell: /bin/zsh
+
+user_groups:
+  - wheel
+  - input
+  - wireshark
+  - keyd
+  - openrazer
+  - scanner
+  - lp
+  - libvirt
+  - kvm
+
+
+# ---------------------------------------------------------------------------
+# Networking
+# ---------------------------------------------------------------------------
+
+networkmanager_enabled: true
+
+# Added so the test VM can be administered over SSH.
+# Set false for strict parity with the original NixOS config.
+ssh_enabled: true
+
+firewall_enabled: true
+
+firewall_tcp_ports:
+  - 22
+  - 1701
+  - 5900
+  - 53317
+
+firewall_udp_ports:
+  - 1701
+  - 1716
+  - 53317
+
+
+# ---------------------------------------------------------------------------
+# Bluetooth
+# ---------------------------------------------------------------------------
+
+bluetooth_enabled: true
+bluetooth_power_on_boot: true
+
+
+# ---------------------------------------------------------------------------
+# Hardware
+# ---------------------------------------------------------------------------
+
+openrazer_enabled: true
+steam_devices_enabled: true
+graphics_32bit: true
+intel_microcode_enabled: true
+rtkit_enabled: true
+
+
+# ---------------------------------------------------------------------------
+# NVIDIA
+# ---------------------------------------------------------------------------
+
+nvidia_enabled: true
+
+# Arch switched its main NVIDIA packages to open kernel modules in the 590
+# transition. Turing/GTX 1650 and newer use the open module packages.
+nvidia_driver_package: nvidia-open
+
+nvidia_modesetting: true
+nvidia_fbdev: true
+nvidia_power_management: true
+
+
+# ---------------------------------------------------------------------------
+# Kernel
+# ---------------------------------------------------------------------------
+
+initrd_kernel_modules:
+  - i915
+
+kernel_modules:
+  - uinput
+
+kernel_parameters:
+  - quiet
+  - intel_idle.max_cstate=1
+  - pcie_aspm=off
+
+
+# ---------------------------------------------------------------------------
+# Boot
+# ---------------------------------------------------------------------------
+
+bootloader: grub
+grub_efi: true
+grub_os_prober: true
+
+# Local theme directory in the repository.
+# Put the extracted HyperFluent Arch theme there when we migrate it.
+grub_theme_enabled: false
+grub_theme_source: "{{ playbook_dir }}/../system/grub/hyperfluent"
+grub_theme_destination: /boot/grub/themes/hyperfluent
+
+
+# ---------------------------------------------------------------------------
+# Plymouth
+# ---------------------------------------------------------------------------
+
+plymouth_enabled: true
+plymouth_theme: spinner
+
+
+# ---------------------------------------------------------------------------
+# Desktop
+# ---------------------------------------------------------------------------
+
+hyprland_enabled: true
+uwsm_enabled: true
+
+xdg_portal_enabled: true
+xdg_portal_hyprland: true
+
+
+# ---------------------------------------------------------------------------
+# Greeter
+# ---------------------------------------------------------------------------
+
+greetd_enabled: true
+noctalia_greeter_enabled: true
+
+greeter_user: greeter
+greeter_group: greeter
+
+greeter_cursor_theme: Bibata-Modern-Ice
+greeter_cursor_size: 24
+greeter_cursor_path: /usr/share/icons
+greeter_keyboard_layout: es
+
+greeter_environment:
+  WLR_DIRECT_SCANOUT_DISABLED: "1"
+
+
+# ---------------------------------------------------------------------------
+# Services
+# ---------------------------------------------------------------------------
+
+syncthing_user: rodrigo
+syncthing_data_dir: /home/rodrigo/Sync
+syncthing_config_dir: /home/rodrigo/.config/syncthing
+
+printing_enabled: true
+
+pipewire_alsa: true
+pipewire_alsa_32bit: true
+pipewire_pulse: true
+pipewire_jack: true
+pipewire_wireplumber: true
+
+
+# ---------------------------------------------------------------------------
+# Security
+# ---------------------------------------------------------------------------
+
+polkit_enabled: true
+gnome_keyring_login: true
+
+
+# ---------------------------------------------------------------------------
+# Virtualization
+# ---------------------------------------------------------------------------
+
+libvirt_enabled: true
+podman_enabled: true
+podman_docker_compat: true

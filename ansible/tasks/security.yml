@@ -1,0 +1,59 @@
+---
+# ---------------------------------------------------------------------------
+# Packages
+# ---------------------------------------------------------------------------
+
+- name: Install security packages
+  ansible.builtin.package:
+    name:
+      - polkit
+      - gnome-keyring
+      - libsecret
+    state: present
+
+
+# ---------------------------------------------------------------------------
+# Polkit
+# ---------------------------------------------------------------------------
+
+- name: Configure wheel udisks2 permissions
+  ansible.builtin.copy:
+    dest: /etc/polkit-1/rules.d/49-wheel-udisks2.rules
+    owner: root
+    group: root
+    mode: "0644"
+    content: |
+      polkit.addRule(function(action, subject) {
+        if ((action.id == "org.freedesktop.udisks2.filesystem-mount" ||
+             action.id == "org.freedesktop.udisks2.filesystem-unmount") &&
+            subject.isInGroup("wheel")) {
+          return polkit.Result.YES;
+        }
+      });
+
+
+# ---------------------------------------------------------------------------
+# GNOME Keyring
+# ---------------------------------------------------------------------------
+
+- name: Configure GNOME Keyring for greetd
+  ansible.builtin.blockinfile:
+    path: /etc/pam.d/greetd
+    marker: "# {mark} ARCH-CONFIG GNOME KEYRING"
+    block: |
+      auth       optional     pam_gnome_keyring.so
+      session    optional     pam_gnome_keyring.so auto_start
+  when:
+    - gnome_keyring_login | bool
+    - greetd_enabled | bool
+
+
+- name: Configure GNOME Keyring for tty login
+  ansible.builtin.blockinfile:
+    path: /etc/pam.d/login
+    marker: "# {mark} ARCH-CONFIG GNOME KEYRING"
+    block: |
+      auth       optional     pam_gnome_keyring.so
+      session    optional     pam_gnome_keyring.so auto_start
+  when:
+    - gnome_keyring_login | bool
