@@ -1,7 +1,32 @@
 ---
 # ---------------------------------------------------------------------------
-# Optional AUR handling
+# Optional/required AUR handling
 # ---------------------------------------------------------------------------
+
+- name: Build required AUR package list
+  ansible.builtin.set_fact:
+    effective_aur_required_packages: >-
+      {{
+        (
+          (
+            aur_required_packages
+            if noctalia_greeter_enabled | bool
+            else (aur_required_packages | difference(['noctalia-greeter']))
+          )
+        ) | unique
+      }}
+    effective_aur_optional_packages: >-
+      {{
+        (
+          aur_optional_packages
+          + (sddm_aur_packages if sddm_enabled | bool else [])
+          + (nix_compat_aur_packages if nix_compat_enabled | bool else [])
+        ) | unique
+      }}
+
+- name: Build complete AUR package list
+  ansible.builtin.set_fact:
+    effective_aur_all_packages: "{{ (effective_aur_required_packages + effective_aur_optional_packages) | unique }}"
 
 - name: Check AUR helper
   ansible.builtin.command:
@@ -12,7 +37,7 @@
   become: false
   when:
     - aur_install_enabled | bool
-    - aur_packages | length > 0
+    - effective_aur_all_packages | length > 0
 
 - name: Ensure AUR helper exists when AUR install is enabled
   ansible.builtin.assert:
@@ -23,27 +48,90 @@
       Instálalo manualmente como {{ username }} y vuelve a ejecutar el playbook.
   when:
     - aur_install_enabled | bool
-    - aur_packages | length > 0
+    - effective_aur_all_packages | length > 0
 
-- name: Install configured AUR packages as user
+- name: Install required AUR packages as user
   ansible.builtin.command:
-    cmd: "{{ aur_helper }} -S --needed --noconfirm {{ aur_packages | join(' ') }}"
+    cmd: "{{ aur_helper }} -S --needed --noconfirm {{ effective_aur_required_packages | join(' ') }}"
   become: true
   become_user: "{{ username }}"
-  register: aur_install_result
+  register: aur_required_install_result
   changed_when: >-
     'there is nothing to do' not in
-    ((aur_install_result.stdout | default('')) + (aur_install_result.stderr | default('')))
+    ((aur_required_install_result.stdout | default('')) + (aur_required_install_result.stderr | default('')))
   when:
     - aur_install_enabled | bool
-    - aur_packages | length > 0
+    - effective_aur_required_packages | length > 0
 
-- name: Inform pending AUR packages when auto-install is disabled
+- name: Install optional AUR packages as user
+  ansible.builtin.command:
+    cmd: "{{ aur_helper }} -S --needed --noconfirm {{ effective_aur_optional_packages | join(' ') }}"
+  become: true
+  become_user: "{{ username }}"
+  register: aur_optional_install_result
+  changed_when: >-
+    'there is nothing to do' not in
+    ((aur_optional_install_result.stdout | default('')) + (aur_optional_install_result.stderr | default('')))
+  failed_when: false
+  when:
+    - aur_install_enabled | bool
+    - effective_aur_optional_packages | length > 0
+
+- name: Warn when optional AUR packages fail
   ansible.builtin.debug:
     msg:
-      - "AUR packages pendientes (instalación automática desactivada):"
-      - "{{ aur_packages }}"
+      - "Algunos paquetes AUR opcionales no se pudieron instalar."
+      - "stdout: {{ aur_optional_install_result.stdout | default('') }}"
+      - "stderr: {{ aur_optional_install_result.stderr | default('') }}"
+  when:
+    - aur_install_enabled | bool
+    - effective_aur_optional_packages | length > 0
+    - aur_optional_install_result.rc != 0
+
+- name: Check required AUR package installation when auto-install is disabled
+  ansible.builtin.command:
+    cmd: "pacman -Q {{ item }}"
+  register: aur_required_presence
+  changed_when: false
+  failed_when: false
+  loop: "{{ effective_aur_required_packages }}"
+  when:
+    - not (aur_install_enabled | bool)
+    - effective_aur_required_packages | length > 0
+
+- name: Build missing required AUR package list
+  ansible.builtin.set_fact:
+    missing_required_aur_packages: >-
+      {{
+        aur_required_presence.results
+        | default([])
+        | selectattr('rc', 'ne', 0)
+        | map(attribute='item')
+        | list
+      }}
+  when:
+    - not (aur_install_enabled | bool)
+    - effective_aur_required_packages | length > 0
+
+- name: Fail when required AUR packages are missing and auto-install is disabled
+  ansible.builtin.assert:
+    that:
+      - (missing_required_aur_packages | default([])) | length == 0
+    fail_msg: >-
+      Faltan paquetes AUR requeridos: {{ missing_required_aur_packages | join(', ') }}.
+      Con aur_install_enabled=false debes preinstalarlos manualmente.
+      Alternativamente activa aur_install_enabled=true para instalación automática
+      (siempre como {{ username }}, nunca como root).
+  when:
+    - not (aur_install_enabled | bool)
+    - effective_aur_required_packages | length > 0
+
+- name: Inform optional AUR packages when auto-install is disabled
+  ansible.builtin.debug:
+    msg:
+      - "Paquetes AUR opcionales pendientes (instalación automática desactivada):"
+      - "{{ effective_aur_optional_packages }}"
       - "Para automatizar, activa aur_install_enabled=true y configura aur_helper."
   when:
     - not (aur_install_enabled | bool)
-    - aur_packages | length > 0
+    - effective_aur_optional_packages | length > 0

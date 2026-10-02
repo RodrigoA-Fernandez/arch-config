@@ -1,0 +1,2 @@
+#!/bin/sh
+nwg-hello -c /etc/nwg-hello/nwg-hello.json -s /etc/nwg-hello/nwg-hello.css

@@ -75,10 +75,11 @@
 
 - name: Install NVIDIA driver
   ansible.builtin.package:
-    name:
-      - "{{ nvidia_driver_package }}"
-      - nvidia-utils
-      - lib32-nvidia-utils
+    name: >-
+      {{
+        [nvidia_driver_package, 'nvidia-utils']
+        + (['lib32-nvidia-utils'] if graphics_32bit | bool else [])
+      }}
     state: present
   when:
     - nvidia_enabled | bool

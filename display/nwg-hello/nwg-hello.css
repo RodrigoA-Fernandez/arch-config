@@ -1,0 +1,42 @@
+* {
+  font-family: "JetBrainsMono Nerd Font Mono";
+  font-size: 17px;
+  font-weight: bold;
+}
+#window {
+  background-color: rgba(60, 56, 54, 0.95);
+  border-radius: 12px;
+  padding: 30px;
+}
+window.popup menuitem:hover {
+    background-color: #504945;
+    border-radius: 6px;
+}
+entry {
+  background-color: #504945;
+  color: #f9f5d7;
+  border: 1px solid #665c54;
+  border-radius: 6px;
+}
+
+entry:focus {
+    border: 1px solid #d79921;
+    outline: none;
+    outline-width: 0;
+    box-shadow: none;
+}
+
+button {
+  background-color: #d79921;
+  color: #f9f5d7;
+  border: none;
+  border-radius: 6px;
+}
+button:hover {
+  background-color: #bdae93;
+}
+window {
+  background-color: #282828;
+  background-image: url("/etc/nwg-hello/wallpaper.jpg");
+  background-size: 100% 100%;
+}
