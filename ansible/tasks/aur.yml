@@ -19,7 +19,6 @@
       {{
         (
           aur_optional_packages
-          + (sddm_aur_packages if sddm_enabled | bool else [])
           + (nix_compat_aur_packages if nix_compat_enabled | bool else [])
         ) | unique
       }}
@@ -27,6 +26,10 @@
 - name: Build complete AUR package list
   ansible.builtin.set_fact:
     effective_aur_all_packages: "{{ (effective_aur_required_packages + effective_aur_optional_packages) | unique }}"
+
+# ---------------------------------------------------------------------------
+# AUR helper
+# ---------------------------------------------------------------------------
 
 - name: Check AUR helper
   ansible.builtin.command:
@@ -39,39 +42,176 @@
     - aur_install_enabled | bool
     - effective_aur_all_packages | length > 0
 
-- name: Ensure AUR helper exists when AUR install is enabled
-  ansible.builtin.assert:
-    that:
-      - aur_helper_check.rc == 0
-    fail_msg: >-
-      aur_install_enabled=true pero {{ aur_helper }} no está instalado.
-      Instálalo manualmente como {{ username }} y vuelve a ejecutar el playbook.
+- name: Install AUR helper build dependencies
+  ansible.builtin.package:
+    name:
+      - base-devel
+      - git
+      - go
+    state: present
+  when:
+    - aur_install_enabled | bool
+    - effective_aur_all_packages | length > 0
+    - aur_helper_check.rc != 0
+
+- name: Create AUR build directory
+  ansible.builtin.file:
+    path: "/tmp/{{ aur_helper }}-build"
+    state: directory
+    owner: "{{ username }}"
+    group: "{{ username }}"
+    mode: "0755"
+  when:
+    - aur_install_enabled | bool
+    - effective_aur_all_packages | length > 0
+    - aur_helper_check.rc != 0
+
+- name: Clone yay from AUR
+  ansible.builtin.git:
+    repo: https://aur.archlinux.org/yay.git
+    dest: "/tmp/{{ aur_helper }}-build/yay"
+    version: master
+  become: true
+  become_user: "{{ username }}"
+  when:
+    - aur_install_enabled | bool
+    - effective_aur_all_packages | length > 0
+    - aur_helper == "yay"
+    - aur_helper_check.rc != 0
+
+- name: Build yay package as user
+  ansible.builtin.command:
+    cmd: makepkg -f --noconfirm
+    chdir: "/tmp/{{ aur_helper }}-build/yay"
+  become: true
+  become_user: "{{ username }}"
+  when:
+    - aur_install_enabled | bool
+    - effective_aur_all_packages | length > 0
+    - aur_helper == "yay"
+    - aur_helper_check.rc != 0
+
+- name: Find built yay package
+  ansible.builtin.find:
+    paths: "/tmp/{{ aur_helper }}-build/yay"
+    patterns:
+      - "yay-[0-9]*.pkg.tar.zst"
+    file_type: file
+  register: yay_package
+  when:
+    - aur_install_enabled | bool
+    - effective_aur_all_packages | length > 0
+    - aur_helper == "yay"
+    - aur_helper_check.rc != 0
+
+- name: Install yay package
+  ansible.builtin.command:
+    cmd: "pacman -U --noconfirm {{ yay_package.files[0].path }}"
+  when:
+    - aur_install_enabled | bool
+    - effective_aur_all_packages | length > 0
+    - aur_helper == "yay"
+    - aur_helper_check.rc != 0
+    - yay_package.files | length > 0
+
+- name: Build yay package as user
+  ansible.builtin.command:
+    cmd: makepkg -f --noconfirm
+    chdir: "/tmp/{{ aur_helper }}-build/yay"
+  become: true
+  become_user: "{{ username }}"
+  when:
+    - aur_install_enabled | bool
+    - effective_aur_all_packages | length > 0
+    - aur_helper == "yay"
+    - aur_helper_check.rc != 0
+
+- name: Find built yay package
+  ansible.builtin.find:
+    paths: "/tmp/{{ aur_helper }}-build/yay"
+    patterns:
+      - "yay-[0-9]*.pkg.tar.zst"
+    file_type: file
+  register: yay_package
+  when:
+    - aur_install_enabled | bool
+    - effective_aur_all_packages | length > 0
+    - aur_helper == "yay"
+    - aur_helper_check.rc != 0
+
+- name: Install yay package
+  ansible.builtin.command:
+    cmd: "pacman -U --noconfirm {{ yay_package.files[0].path }}"
+  when:
+    - aur_install_enabled | bool
+    - effective_aur_all_packages | length > 0
+    - aur_helper == "yay"
+    - aur_helper_check.rc != 0
+    - yay_package.files | length > 0
+
+# ---------------------------------------------------------------------------
+# Allow yay to invoke pacman non-interactively
+# ---------------------------------------------------------------------------
+
+- name: Allow AUR user to run pacman without password temporarily
+  ansible.builtin.copy:
+    dest: /etc/sudoers.d/90-aur-yay
+    owner: root
+    group: root
+    mode: "0440"
+    content: |
+      {{ username }} ALL=(root) NOPASSWD: /usr/bin/pacman
+    validate: "/usr/bin/visudo -cf %s"
   when:
     - aur_install_enabled | bool
     - effective_aur_all_packages | length > 0
 
+# ---------------------------------------------------------------------------
+# Required AUR packages
+# ---------------------------------------------------------------------------
+
 - name: Install required AUR packages as user
   ansible.builtin.command:
-    cmd: "{{ aur_helper }} -S --needed --noconfirm {{ effective_aur_required_packages | join(' ') }}"
+    cmd: >-
+      {{ aur_helper }} -S --needed --noconfirm
+      --answerclean None
+      --answerdiff None
+      {{ effective_aur_required_packages | join(' ') }}
   become: true
   become_user: "{{ username }}"
   register: aur_required_install_result
   changed_when: >-
     'there is nothing to do' not in
-    ((aur_required_install_result.stdout | default('')) + (aur_required_install_result.stderr | default('')))
+    (
+      (aur_required_install_result.stdout | default(''))
+      +
+      (aur_required_install_result.stderr | default(''))
+    )
   when:
     - aur_install_enabled | bool
     - effective_aur_required_packages | length > 0
 
+# ---------------------------------------------------------------------------
+# Optional AUR packages
+# ---------------------------------------------------------------------------
+
 - name: Install optional AUR packages as user
   ansible.builtin.command:
-    cmd: "{{ aur_helper }} -S --needed --noconfirm {{ effective_aur_optional_packages | join(' ') }}"
+    cmd: >-
+      {{ aur_helper }} -S --needed --noconfirm
+      --answerclean None
+      --answerdiff None
+      {{ effective_aur_optional_packages | join(' ') }}
   become: true
   become_user: "{{ username }}"
   register: aur_optional_install_result
   changed_when: >-
     'there is nothing to do' not in
-    ((aur_optional_install_result.stdout | default('')) + (aur_optional_install_result.stderr | default('')))
+    (
+      (aur_optional_install_result.stdout | default(''))
+      +
+      (aur_optional_install_result.stderr | default(''))
+    )
   failed_when: false
   when:
     - aur_install_enabled | bool
@@ -88,16 +228,17 @@
     - effective_aur_optional_packages | length > 0
     - aur_optional_install_result.rc != 0
 
-- name: Check required AUR package installation when auto-install is disabled
-  ansible.builtin.command:
-    cmd: "pacman -Q {{ item }}"
-  register: aur_required_presence
-  changed_when: false
-  failed_when: false
-  loop: "{{ effective_aur_required_packages }}"
+# ---------------------------------------------------------------------------
+# Remove temporary sudo permission
+# ---------------------------------------------------------------------------
+
+- name: Remove temporary AUR pacman sudo permission
+  ansible.builtin.file:
+    path: /etc/sudoers.d/90-aur-yay
+    state: absent
   when:
-    - not (aur_install_enabled | bool)
-    - effective_aur_required_packages | length > 0
+    - aur_install_enabled | bool
+    - effective_aur_all_packages | length > 0
 
 - name: Build missing required AUR package list
   ansible.builtin.set_fact:

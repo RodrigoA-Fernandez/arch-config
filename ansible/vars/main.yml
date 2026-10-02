@@ -21,22 +21,16 @@ user_shell: /bin/zsh
 
 user_groups:
   - wheel
-  - networkmanager
-  - input
   - wireshark
-  - keyd
-  - podman
-  - openrazer
-  - scanner
   - lp
-
-libvirt_group_candidates:
-  - libvirt
-  - libvirtd
-
-extra_user_groups:
+  - scanner
+  - kvm
+  - openrazer
+  - input
+  - keyd
   - kvm
 
+libvirt_group_name: libvirt
 
 # ---------------------------------------------------------------------------
 # Networking
@@ -46,7 +40,7 @@ networkmanager_enabled: true
 
 # Added so the test VM can be administered over SSH.
 # Set false for strict parity with the original NixOS config.
-ssh_enabled: false
+ssh_enabled: true
 
 firewall_enabled: true
 
@@ -54,6 +48,7 @@ firewall_tcp_ports:
   - 1701
   - 5900
   - 53317
+  - 22
 
 firewall_udp_ports:
   - 1701
@@ -101,7 +96,7 @@ rtkit_enabled: true
 
 nvidia_enabled: true
 
-nvidia_driver_package: nvidia
+nvidia_driver_package: nvidia-open
 
 nvidia_modesetting: true
 nvidia_fbdev: true
@@ -129,7 +124,8 @@ kernel_parameters:
 # ---------------------------------------------------------------------------
 
 bootloader: grub
-grub_efi: true
+#Poner en true para la maquina real
+grub_efi: false
 grub_os_prober: true
 
 # Local theme directory in the repository.
@@ -165,7 +161,6 @@ xorg_compat_enabled: false
 
 greetd_enabled: true
 noctalia_greeter_enabled: true
-sddm_enabled: false
 
 greeter_user: greeter
 greeter_group: greeter
@@ -186,6 +181,7 @@ greeter_environment:
 syncthing_user: rodrigo
 syncthing_data_dir: /home/rodrigo/Sync
 syncthing_config_dir: /home/rodrigo/.config/syncthing
+syncthing_enabled: true
 
 printing_enabled: true
 
@@ -213,7 +209,6 @@ official_packages:
   - neovim
   - kitty
   - wl-clipboard
-  - libinput-gestures
   - cargo
   - rust
   - wine
@@ -231,19 +226,18 @@ official_packages:
   - gst-plugins-bad
   - gst-plugins-ugly
   - qt6-multimedia
+  - syncthing
 
-aur_install_enabled: false
+aur_install_enabled: true
 aur_helper: yay
 aur_required_packages:
   - noctalia-greeter
+  - brlaser
+  - libinput-gestures
 
 aur_optional_packages:
   - open-scq30
   - polychromatic
-
-sddm_aur_packages:
-  - sddm-astronaut
-  - catppuccin-sddm
 
 nix_compat_aur_packages:
   - nix-direnv

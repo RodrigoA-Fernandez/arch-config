@@ -1,8 +1,19 @@
 ---
 - name: Configure Arch system
   hosts: localhost
-  become: true
+  become: true 
   connection: local
+  gather_facts: false
+
+  pre_tasks:
+    - name: Verify become credentials
+      ansible.builtin.command:
+        cmd: id -u
+      become: true
+      changed_when: false
+
+    - name: Gather facts
+      ansible.builtin.setup:
 
   vars_files:
     - vars/main.yml

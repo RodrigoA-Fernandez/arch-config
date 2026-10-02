@@ -11,7 +11,6 @@
       - cups
       - cups-filters
       - cups-browsed
-      - brlaser
       - dbus
       - flatpak
       - gvfs
@@ -26,14 +25,6 @@
       - pipewire-jack
       - wireplumber
     state: present
-
-- name: Validate display manager selection
-  ansible.builtin.assert:
-    that:
-      - not (greetd_enabled | bool and noctalia_greeter_enabled | bool and sddm_enabled | bool)
-    fail_msg: >-
-      greetd+Noctalia y SDDM no deben habilitarse simultáneamente.
-      Desactiva sddm_enabled o desactiva noctalia_greeter_enabled.
 
 
 # ---------------------------------------------------------------------------
@@ -256,13 +247,31 @@
     group: "{{ syncthing_user }}"
     mode: "0700"
 
+- name: Enable lingering for Syncthing user
+  ansible.builtin.command:
+    cmd: "loginctl enable-linger {{ syncthing_user }}"
+  changed_when: false
 
-- name: Enable Syncthing system service
-  ansible.builtin.systemd_service:
-    name: "syncthing@{{ syncthing_user }}.service"
+- name: Get Syncthing user UID
+  ansible.builtin.command:
+    cmd: "id -u {{ syncthing_user }}"
+  register: syncthing_uid_result
+  changed_when: false
+
+- name: Set Syncthing user UID
+  ansible.builtin.set_fact:
+    syncthing_uid: "{{ syncthing_uid_result.stdout }}"
+
+- name: Enable Syncthing user service
+  ansible.builtin.systemd:
+    name: syncthing.service
+    scope: user
     enabled: true
     state: started
-
+  become: true
+  become_user: "{{ syncthing_user }}"
+  environment:
+    XDG_RUNTIME_DIR: "/run/user/{{ syncthing_uid }}"
 
 # ---------------------------------------------------------------------------
 # XDG portals
@@ -366,25 +375,19 @@
   when: greetd_enabled | bool
 
 
-- name: Check Noctalia Greeter session wrapper
-  ansible.builtin.command:
-    cmd: command -v noctalia-greeter-session
-  register: noctalia_greeter_command
-  changed_when: false
-  failed_when: false
-  when: noctalia_greeter_enabled | bool
-
-
 - name: Verify Noctalia Greeter is installed
+  ansible.builtin.stat:
+    path: /usr/bin/noctalia-greeter
+  register: noctalia_greeter_binary
+
+- name: Assert Noctalia Greeter is installed
   ansible.builtin.assert:
     that:
-      - noctalia_greeter_command.rc == 0
+      - noctalia_greeter_binary.stat.exists
+      - noctalia_greeter_binary.stat.executable
     fail_msg: >-
-      noctalia-greeter-session no está instalado.
-      Instala Noctalia Greeter mediante tu gestor de paquetes/AUR antes
-      de ejecutar esta configuración.
-  when: noctalia_greeter_enabled | bool
-
+      /usr/bin/noctalia-greeter no está instalado.
+      Instala Noctalia Greeter mediante tu gestor de paquetes/AUR.
 
 - name: Create Noctalia Greeter state directory
   ansible.builtin.file:
@@ -430,11 +433,12 @@
       vt = 1
 
       [default_session]
-      command = "env {% for env_var in greeter_environment | dict2items %}{{ env_var.key }}={{ env_var.value }} {% endfor %}{{ noctalia_greeter_command.stdout }}"
+      command = "env {% for env_var in greeter_environment | dict2items %}{{ env_var.key }}={{ env_var.value }} {% endfor %} /usr/bin/noctalia-greeter-session"
       user = "{{ greeter_user }}"
   when: noctalia_greeter_enabled | bool
   notify:
     - Restart greetd
+
 
 
 - name: Enable greetd
@@ -446,23 +450,6 @@
     - greetd_enabled | bool
     - noctalia_greeter_enabled | bool
 
-
-# ---------------------------------------------------------------------------
-# Optional SDDM
-# ---------------------------------------------------------------------------
-
-- name: Install SDDM optionally
-  ansible.builtin.package:
-    name: sddm
-    state: present
-  when: sddm_enabled | bool
-
-- name: Enable SDDM optionally
-  ansible.builtin.systemd_service:
-    name: sddm.service
-    enabled: true
-    state: started
-  when: sddm_enabled | bool
 
 # ---------------------------------------------------------------------------
 # KDE Connect

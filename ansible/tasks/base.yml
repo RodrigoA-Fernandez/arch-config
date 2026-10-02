@@ -4,22 +4,13 @@
 # ---------------------------------------------------------------------------
 
 - name: Enable multilib repository
-  ansible.builtin.lineinfile:
+  ansible.builtin.blockinfile:
     path: /etc/pacman.conf
-    regexp: '^#\[multilib\]$'
-    line: '[multilib]'
-    state: present
-  when: multilib_enabled | bool
-
-- name: Enable multilib mirrorlist
-  ansible.builtin.lineinfile:
-    path: /etc/pacman.conf
-    regexp: '^#Include = /etc/pacman.d/mirrorlist$'
-    line: 'Include = /etc/pacman.d/mirrorlist'
+    marker: "# {mark} ANSIBLE MULTILIB"
     insertafter: '^\[multilib\]$'
-    state: present
+    block: |
+      Include = /etc/pacman.d/mirrorlist
   when: multilib_enabled | bool
-
 
 # ---------------------------------------------------------------------------
 # Base packages
@@ -165,7 +156,6 @@
   ansible.builtin.package:
     name:
       - ttf-jetbrains-mono-nerd
-      - bibata-cursor-theme
       - adwaita-icon-theme
       - gdk-pixbuf2
       - librsvg
