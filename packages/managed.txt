@@ -1,0 +1,12 @@
+neovim
+imagemagick
+tree-sitter
+marksman
+lua-language-server
+stylua
+lldb
+
+
+cargo
+rust
+rust-analyzer
